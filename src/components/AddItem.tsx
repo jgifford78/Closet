@@ -1,11 +1,13 @@
 import { useRef, useState } from 'react';
 import { addItem } from '../db';
-import { downscale, extractColors, removeBackground } from '../image';
-import type { ClosetItem } from '../db';
+import { downscale, extractColors, flattenOnWhite, removeBackground } from '../image';
+import { classifyCategory, defaultSeasons } from '../classify';
+import type { Category, ClosetItem } from '../db';
 
 export function AddItem({ onAdded }: { onAdded: (item: ClosetItem) => void }) {
   const input = useRef<HTMLInputElement>(null);
   const [removeBg, setRemoveBg] = useState(true);
+  const [autoType, setAutoType] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
 
   async function handleFile(file: File) {
@@ -26,7 +28,19 @@ export function AddItem({ onAdded }: { onAdded: (item: ClosetItem) => void }) {
       }
       setStatus('Detecting colors…');
       const colors = await extractColors(photo, backgroundRemoved).catch(() => []);
-      const item = await addItem({ name: 'New item', photo, backgroundRemoved, colors });
+      let category: Category | null = null;
+      if (autoType) {
+        setStatus('Identifying item… (first time downloads a model)');
+        const url = URL.createObjectURL(await flattenOnWhite(photo));
+        try {
+          category = await classifyCategory(url);
+        } catch (e) {
+          console.warn('Category detection failed; leaving blank', e);
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      }
+      const item = await addItem({ name: 'New item', photo, backgroundRemoved, colors, category, seasons: defaultSeasons(category) });
       onAdded(item);
     } catch (e) {
       alert(`Could not add item: ${(e as Error).message}`);
@@ -41,6 +55,10 @@ export function AddItem({ onAdded }: { onAdded: (item: ClosetItem) => void }) {
       <label className="check">
         <input type="checkbox" checked={removeBg} onChange={e => setRemoveBg(e.target.checked)} />
         Remove background
+      </label>
+      <label className="check">
+        <input type="checkbox" checked={autoType} onChange={e => setAutoType(e.target.checked)} />
+        Auto-detect type
       </label>
       {/* No "capture" attribute: iOS then offers Take Photo / Photo Library. */}
       <input

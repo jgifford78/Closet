@@ -38,3 +38,22 @@ export async function extractColors(photo: Blob, hasAlpha: boolean): Promise<imp
   const [x, y, cw, ch] = [Math.round(w * 0.25), Math.round(h * 0.25), Math.round(w * 0.5), Math.round(h * 0.5)];
   return dominantColors(ctx.getImageData(x, y, Math.max(1, cw), Math.max(1, ch)).data);
 }
+
+/** Composite a (possibly transparent) photo onto white so the classifier sees a normal picture. */
+export async function flattenOnWhite(photo: Blob, size = 224): Promise<Blob> {
+  const bitmap = await createImageBitmap(photo);
+  const scale = Math.min(size / bitmap.width, size / bitmap.height);
+  const w = Math.round(bitmap.width * scale);
+  const h = Math.round(bitmap.height * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, size, size);
+  ctx.drawImage(bitmap, (size - w) / 2, (size - h) / 2, w, h);
+  bitmap.close();
+  return new Promise((resolve, reject) =>
+    canvas.toBlob(b => (b ? resolve(b) : reject(new Error('Image encode failed'))), 'image/png')
+  );
+}
