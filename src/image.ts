@@ -1,13 +1,21 @@
 /** Downscale a photo so the longest side is <= maxSide; returns a JPEG/PNG blob. */
-export async function downscale(file: Blob, maxSide = 1024, type: 'image/jpeg' | 'image/png' = 'image/jpeg'): Promise<Blob> {
+export interface CropFraction { x: number; y: number; w: number; h: number } // 0..1 of the oriented image
+
+export async function downscale(
+  file: Blob, maxSide = 1024, type: 'image/jpeg' | 'image/png' = 'image/jpeg', crop?: CropFraction
+): Promise<Blob> {
   const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
-  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
-  const w = Math.round(bitmap.width * scale);
-  const h = Math.round(bitmap.height * scale);
+  const sx = crop ? Math.round(crop.x * bitmap.width) : 0;
+  const sy = crop ? Math.round(crop.y * bitmap.height) : 0;
+  const sw = crop ? Math.max(1, Math.round(crop.w * bitmap.width)) : bitmap.width;
+  const sh = crop ? Math.max(1, Math.round(crop.h * bitmap.height)) : bitmap.height;
+  const scale = Math.min(1, maxSide / Math.max(sw, sh));
+  const w = Math.max(1, Math.round(sw * scale));
+  const h = Math.max(1, Math.round(sh * scale));
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
-  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, w, h);
+  canvas.getContext('2d')!.drawImage(bitmap, sx, sy, sw, sh, 0, 0, w, h);
   bitmap.close();
   return new Promise((resolve, reject) =>
     canvas.toBlob(b => (b ? resolve(b) : reject(new Error('Image encode failed'))), type, 0.88)
@@ -55,5 +63,31 @@ export async function flattenOnWhite(photo: Blob, size = 224): Promise<Blob> {
   bitmap.close();
   return new Promise((resolve, reject) =>
     canvas.toBlob(b => (b ? resolve(b) : reject(new Error('Image encode failed'))), 'image/png')
+  );
+}
+
+/** Drop stray clutter from a cutout (text, price tags, carousel dots) and trim empty edges. */
+export async function cleanCutout(photo: Blob): Promise<Blob> {
+  const { keepMainObject } = await import('./cleanup');
+  const bitmap = await createImageBitmap(photo);
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+  ctx.drawImage(bitmap, 0, 0);
+  bitmap.close();
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const box = keepMainObject(img.data, img.width, img.height);
+  if (!box) return photo;
+  ctx.putImageData(img, 0, 0);
+  const pad = 8;
+  const x = Math.max(0, box.x - pad), y = Math.max(0, box.y - pad);
+  const w = Math.min(canvas.width - x, box.w + pad * 2), h = Math.min(canvas.height - y, box.h + pad * 2);
+  const out = document.createElement('canvas');
+  out.width = w;
+  out.height = h;
+  out.getContext('2d')!.drawImage(canvas, x, y, w, h, 0, 0, w, h);
+  return new Promise((resolve, reject) =>
+    out.toBlob(b => (b ? resolve(b) : reject(new Error('Image encode failed'))), 'image/png')
   );
 }

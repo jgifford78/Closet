@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { addItem } from '../db';
-import { downscale, extractColors, flattenOnWhite, removeBackground } from '../image';
+import { cleanCutout, downscale, extractColors, flattenOnWhite, removeBackground, type CropFraction } from '../image';
+import { Cropper } from './Cropper';
 import { classifyItem, defaultName, defaultSeasons } from '../classify';
 import type { Category, ClosetItem } from '../db';
 
@@ -9,11 +10,12 @@ export function AddItem({ onAdded }: { onAdded: (item: ClosetItem) => void }) {
   const [removeBg, setRemoveBg] = useState(true);
   const [autoType, setAutoType] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
+  const [pending, setPending] = useState<File | null>(null);
 
-  async function handleFile(file: File) {
+  async function handleFile(file: File, crop?: CropFraction) {
     try {
       setStatus('Preparing photo…');
-      const small = await downscale(file);
+      const small = await downscale(file, 1024, 'image/jpeg', crop);
       let photo: Blob = small;
       let backgroundRemoved = false;
       if (removeBg) {
@@ -21,6 +23,7 @@ export function AddItem({ onAdded }: { onAdded: (item: ClosetItem) => void }) {
           setStatus('Removing background… (first time downloads a model)');
           photo = await removeBackground(small);
           backgroundRemoved = true;
+          photo = await cleanCutout(photo).catch(() => photo);
         } catch (e) {
           console.warn('Background removal failed, keeping original', e);
           setStatus('Background removal failed; saving original…');
@@ -71,8 +74,15 @@ export function AddItem({ onAdded }: { onAdded: (item: ClosetItem) => void }) {
         type="file"
         accept="image/*"
         hidden
-        onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
+        onChange={e => e.target.files?.[0] && setPending(e.target.files[0])}
       />
+      {pending && (
+        <Cropper
+          file={pending}
+          onCancel={() => { setPending(null); if (input.current) input.current.value = ''; }}
+          onDone={crop => { const f = pending; setPending(null); void handleFile(f, crop); }}
+        />
+      )}
       <button className="primary" disabled={!!status} onClick={() => input.current?.click()}>
         {status ?? '+ Add item'}
       </button>
