@@ -20,6 +20,8 @@ export interface ClosetItem {
   colors: ColorName[];
   seasons: Season[];
   formality: Formality | null;
+  /** True while the name is generated (not typed by the user), so it can follow category/color edits. */
+  autoNamed: boolean;
 }
 
 interface ClosetDB extends DBSchema {
@@ -44,12 +46,13 @@ function normalize(raw: Partial<ClosetItem> & Pick<ClosetItem, 'id' | 'name' | '
     colors: [],
     seasons: [],
     formality: null,
+    autoNamed: raw.name === 'New item',
     ...raw
   };
 }
 
 export type NewItem = Pick<ClosetItem, 'name' | 'photo' | 'backgroundRemoved'> &
-  Partial<Pick<ClosetItem, 'category' | 'colors' | 'seasons' | 'formality'>>;
+  Partial<Pick<ClosetItem, 'category' | 'colors' | 'seasons' | 'formality' | 'autoNamed'>>;
 
 export async function addItem(input: NewItem): Promise<ClosetItem> {
   const item = normalize({ id: crypto.randomUUID(), createdAt: Date.now(), ...input });
@@ -59,7 +62,7 @@ export async function addItem(input: NewItem): Promise<ClosetItem> {
 
 export async function updateItem(
   id: string,
-  patch: Partial<Pick<ClosetItem, 'name' | 'category' | 'colors' | 'seasons' | 'formality'>>
+  patch: Partial<Pick<ClosetItem, 'name' | 'category' | 'colors' | 'seasons' | 'formality' | 'autoNamed'>>
 ): Promise<ClosetItem | undefined> {
   const d = await db();
   const current = await d.get('items', id);

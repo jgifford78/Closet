@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PROMPTS, defaultSeasons, pickCategory } from './classify';
+import { PROMPTS, defaultName, defaultSeasons, pickCategory } from './classify';
 
 const score = (m: Record<string, number>) => PROMPTS.map(([label]) => ({ label, score: m[label] ?? 0 }));
 
@@ -10,6 +10,7 @@ describe('pickCategory', () => {
       'a photo of a dress': 0.3
     }));
     expect(r.category).toBe('bottom'); // 0.45 beats dress 0.30
+    expect(r.type).toBe('Pants'); // best prompt inside the winning category
   });
   it('returns null when not confident', () => {
     expect(pickCategory(score({ 'a photo of a dress': 0.2 })).category).toBeNull();
@@ -24,5 +25,14 @@ describe('defaultSeasons', () => {
     expect(defaultSeasons('outerwear')).toEqual(['fall', 'winter']);
     expect(defaultSeasons('top')).toEqual([]);
     expect(defaultSeasons(null)).toEqual([]);
+  });
+});
+
+describe('defaultName', () => {
+  it('combines main color and type', () => {
+    expect(defaultName('bottom', ['navy'], 'Pants')).toBe('Navy Pants');
+    expect(defaultName('outerwear', [], null)).toBe('Jacket');
+    expect(defaultName('top', ['white'])).toBe('White Top');
+    expect(defaultName(null, ['red'])).toBe('New item');
   });
 });

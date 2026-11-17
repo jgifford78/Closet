@@ -1,35 +1,51 @@
 import type { Category, Season } from './db';
 
 /** CLIP prompts -> category. Several prompts per category; their scores are summed. */
-export const PROMPTS: Array<[prompt: string, category: Category]> = [
-  ['a photo of a t-shirt', 'top'],
-  ['a photo of a button-up shirt or blouse', 'top'],
-  ['a photo of a sweater or hoodie', 'top'],
-  ['a photo of pants or jeans', 'bottom'],
-  ['a photo of shorts', 'bottom'],
-  ['a photo of a skirt', 'bottom'],
-  ['a photo of a dress', 'dress'],
-  ['a photo of a jacket or coat', 'outerwear'],
-  ['a photo of a blazer', 'outerwear'],
-  ['a photo of shoes or sneakers', 'shoes'],
-  ['a photo of boots', 'shoes'],
-  ['a photo of a hat, belt, scarf, bag or sunglasses', 'accessory']
+export const PROMPTS: Array<[prompt: string, category: Category, typeName: string]> = [
+  ['a photo of a t-shirt', 'top', 'T-shirt'],
+  ['a photo of a button-up shirt or blouse', 'top', 'Shirt'],
+  ['a photo of a sweater or hoodie', 'top', 'Sweater'],
+  ['a photo of pants or jeans', 'bottom', 'Pants'],
+  ['a photo of shorts', 'bottom', 'Shorts'],
+  ['a photo of a skirt', 'bottom', 'Skirt'],
+  ['a photo of a dress', 'dress', 'Dress'],
+  ['a photo of a jacket or coat', 'outerwear', 'Jacket'],
+  ['a photo of a blazer', 'outerwear', 'Blazer'],
+  ['a photo of shoes or sneakers', 'shoes', 'Shoes'],
+  ['a photo of boots', 'shoes', 'Boots'],
+  ['a photo of a hat, belt, scarf, bag or sunglasses', 'accessory', 'Accessory']
 ];
 
 export interface Scored { label: string; score: number }
 
-/** Sum prompt scores per category; return the best category if it is confident enough. */
-export function pickCategory(results: Scored[], minScore = 0.35): { category: Category | null; score: number } {
-  const byLabel = new Map(PROMPTS);
+/** Sum prompt scores per category; return the best category (and its best-matching type name) if confident. */
+export function pickCategory(results: Scored[], minScore = 0.35): { category: Category | null; type: string | null; score: number } {
+  const byLabel = new Map(PROMPTS.map(([prompt, c, t]) => [prompt, { c, t }]));
   const totals = new Map<Category, number>();
+  const bestType = new Map<Category, { t: string; s: number }>();
   for (const { label, score } of results) {
-    const c = byLabel.get(label);
-    if (c) totals.set(c, (totals.get(c) ?? 0) + score);
+    const e = byLabel.get(label);
+    if (!e) continue;
+    totals.set(e.c, (totals.get(e.c) ?? 0) + score);
+    if (score > (bestType.get(e.c)?.s ?? -1)) bestType.set(e.c, { t: e.t, s: score });
   }
   let best: Category | null = null;
   let bestScore = 0;
   for (const [c, s] of totals) if (s > bestScore) [best, bestScore] = [c, s];
-  return bestScore >= minScore ? { category: best, score: bestScore } : { category: null, score: bestScore };
+  if (!best || bestScore < minScore) return { category: null, type: null, score: bestScore };
+  return { category: best, type: bestType.get(best)?.t ?? null, score: bestScore };
+}
+
+const GENERIC_TYPE: Record<Category, string> = {
+  top: 'Top', bottom: 'Pants', dress: 'Dress', outerwear: 'Jacket', shoes: 'Shoes', accessory: 'Accessory'
+};
+
+/** Default item name, e.g. "Navy Pants". Falls back to "New item" when nothing is known. */
+export function defaultName(category: Category | null, colors: string[], type?: string | null): string {
+  const base = type ?? (category ? GENERIC_TYPE[category] : null);
+  if (!base) return 'New item';
+  const color = colors[0] ? colors[0][0].toUpperCase() + colors[0].slice(1) : '';
+  return color ? `${color} ${base}` : base;
 }
 
 /** Only suggest seasons where category implies them; everything else stays for the user. */
@@ -51,8 +67,9 @@ function load(): Promise<Classifier> {
 }
 
 /** On-device guess of the clothing category. Model downloads on first use, then is cached. */
-export async function classifyCategory(imageUrl: string): Promise<Category | null> {
+export async function classifyItem(imageUrl: string): Promise<{ category: Category | null; type: string | null }> {
   const run = await load();
   const results = await run(imageUrl, PROMPTS.map(([p]) => p));
-  return pickCategory(results).category;
+  const { category, type } = pickCategory(results);
+  return { category, type };
 }

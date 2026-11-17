@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { addItem } from '../db';
 import { downscale, extractColors, flattenOnWhite, removeBackground } from '../image';
-import { classifyCategory, defaultSeasons } from '../classify';
+import { classifyItem, defaultName, defaultSeasons } from '../classify';
 import type { Category, ClosetItem } from '../db';
 
 export function AddItem({ onAdded }: { onAdded: (item: ClosetItem) => void }) {
@@ -29,18 +29,23 @@ export function AddItem({ onAdded }: { onAdded: (item: ClosetItem) => void }) {
       setStatus('Detecting colors…');
       const colors = await extractColors(photo, backgroundRemoved).catch(() => []);
       let category: Category | null = null;
+      let type: string | null = null;
       if (autoType) {
         setStatus('Identifying item… (first time downloads a model)');
         const url = URL.createObjectURL(await flattenOnWhite(photo));
         try {
-          category = await classifyCategory(url);
+          ({ category, type } = await classifyItem(url));
         } catch (e) {
           console.warn('Category detection failed; leaving blank', e);
         } finally {
           URL.revokeObjectURL(url);
         }
       }
-      const item = await addItem({ name: 'New item', photo, backgroundRemoved, colors, category, seasons: defaultSeasons(category) });
+      const item = await addItem({
+        name: defaultName(category, colors, type),
+        autoNamed: true,
+        photo, backgroundRemoved, colors, category, seasons: defaultSeasons(category)
+      });
       onAdded(item);
     } catch (e) {
       alert(`Could not add item: ${(e as Error).message}`);

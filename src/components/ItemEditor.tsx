@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   CATEGORIES, FORMALITIES, SEASONS, deleteItem, updateItem,
   type Category, type ClosetItem, type Formality, type Season
 } from '../db';
+import { BlobImage } from './BlobImage';
+import { defaultName } from '../classify';
 import { COLOR_HEX, COLOR_NAMES, type ColorName } from '../colors';
 
 function toggle<T>(list: T[], v: T): T[] {
@@ -15,34 +17,43 @@ export function ItemEditor({ item, onClose }: { item: ClosetItem; onClose: () =>
   const [colors, setColors] = useState<ColorName[]>(item.colors);
   const [seasons, setSeasons] = useState<Season[]>(item.seasons);
   const [formality, setFormality] = useState<Formality | null>(item.formality);
-  const url = useMemo(() => URL.createObjectURL(item.photo), [item.photo]);
-  useEffect(() => () => URL.revokeObjectURL(url), [url]);
+  const [nameTouched, setNameTouched] = useState(false);
+
+  /** While the name is generated, keep it in sync with category/color edits. */
+  function rename(nextCategory: Category | null, nextColors: ColorName[]) {
+    if (item.autoNamed && !nameTouched) setName(defaultName(nextCategory, nextColors));
+  }
+  function pickCategory(c: Category | null) { setCategory(c); rename(c, colors); }
+  function pickColors(c: ColorName[]) { setColors(c); rename(category, c); }
 
   async function save() {
-    await updateItem(item.id, { name: name.trim() || 'Untitled', category, colors, seasons, formality });
+    await updateItem(item.id, {
+      name: name.trim() || 'Untitled', category, colors, seasons, formality,
+      autoNamed: item.autoNamed && !nameTouched
+    });
     onClose();
   }
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" onClick={e => e.stopPropagation()}>
-        <img className="preview" src={url} alt={name} />
+        <BlobImage className="preview" id={item.id} blob={item.photo} alt={name} />
         <label className="field">
           Name
-          <input value={name} onChange={e => setName(e.target.value)} />
+          <input value={name} onChange={e => { setName(e.target.value); setNameTouched(true); }} />
         </label>
 
         <div className="field">Category</div>
         <div className="chips">
           {CATEGORIES.map(c => (
-            <button key={c} className={category === c ? 'chip on' : 'chip'} onClick={() => setCategory(category === c ? null : c)}>{c}</button>
+            <button key={c} className={category === c ? 'chip on' : 'chip'} onClick={() => pickCategory(category === c ? null : c)}>{c}</button>
           ))}
         </div>
 
         <div className="field">Colors <small>(first = main)</small></div>
         <div className="chips">
           {COLOR_NAMES.map(c => (
-            <button key={c} className={colors.includes(c) ? 'chip on' : 'chip'} onClick={() => setColors(toggle(colors, c))}>
+            <button key={c} className={colors.includes(c) ? 'chip on' : 'chip'} onClick={() => pickColors(toggle(colors, c))}>
               <span className="dot" style={{ background: COLOR_HEX[c] }} />
               {c}
             </button>
