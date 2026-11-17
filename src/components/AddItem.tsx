@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react';
 import { addItem } from '../db';
-import { downscale, removeBackground } from '../image';
+import { downscale, extractColors, removeBackground } from '../image';
+import type { ClosetItem } from '../db';
 
-export function AddItem({ onAdded }: { onAdded: () => void }) {
+export function AddItem({ onAdded }: { onAdded: (item: ClosetItem) => void }) {
   const input = useRef<HTMLInputElement>(null);
   const [removeBg, setRemoveBg] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
@@ -23,8 +24,10 @@ export function AddItem({ onAdded }: { onAdded: () => void }) {
           setStatus('Background removal failed; saving original…');
         }
       }
-      await addItem({ name: file.name.replace(/\.[^.]+$/, ''), photo, backgroundRemoved });
-      onAdded();
+      setStatus('Detecting colors…');
+      const colors = await extractColors(photo, backgroundRemoved).catch(() => []);
+      const item = await addItem({ name: 'New item', photo, backgroundRemoved, colors });
+      onAdded(item);
     } catch (e) {
       alert(`Could not add item: ${(e as Error).message}`);
     } finally {

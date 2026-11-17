@@ -1,4 +1,12 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
+import type { ColorName } from './colors';
+
+export const CATEGORIES = ['top', 'bottom', 'dress', 'outerwear', 'shoes', 'accessory'] as const;
+export type Category = (typeof CATEGORIES)[number];
+export const SEASONS = ['spring', 'summer', 'fall', 'winter'] as const;
+export type Season = (typeof SEASONS)[number];
+export const FORMALITIES = ['casual', 'smart', 'formal'] as const;
+export type Formality = (typeof FORMALITIES)[number];
 
 export interface ClosetItem {
   id: string;
@@ -7,6 +15,11 @@ export interface ClosetItem {
   /** Photo shown in the grid (background-removed PNG when available). */
   photo: Blob;
   backgroundRemoved: boolean;
+  category: Category | null;
+  /** Most prominent first. */
+  colors: ColorName[];
+  seasons: Season[];
+  formality: Formality | null;
 }
 
 interface ClosetDB extends DBSchema {
@@ -24,15 +37,41 @@ function db() {
   return dbPromise;
 }
 
-export async function addItem(input: Pick<ClosetItem, 'name' | 'photo' | 'backgroundRemoved'>): Promise<ClosetItem> {
-  const item: ClosetItem = { id: crypto.randomUUID(), createdAt: Date.now(), ...input };
+/** Fill tag fields missing on items saved by milestone 2. No schema bump needed. */
+function normalize(raw: Partial<ClosetItem> & Pick<ClosetItem, 'id' | 'name' | 'createdAt' | 'photo' | 'backgroundRemoved'>): ClosetItem {
+  return {
+    category: null,
+    colors: [],
+    seasons: [],
+    formality: null,
+    ...raw
+  };
+}
+
+export type NewItem = Pick<ClosetItem, 'name' | 'photo' | 'backgroundRemoved'> &
+  Partial<Pick<ClosetItem, 'category' | 'colors' | 'seasons' | 'formality'>>;
+
+export async function addItem(input: NewItem): Promise<ClosetItem> {
+  const item = normalize({ id: crypto.randomUUID(), createdAt: Date.now(), ...input });
   await (await db()).put('items', item);
   return item;
 }
 
+export async function updateItem(
+  id: string,
+  patch: Partial<Pick<ClosetItem, 'name' | 'category' | 'colors' | 'seasons' | 'formality'>>
+): Promise<ClosetItem | undefined> {
+  const d = await db();
+  const current = await d.get('items', id);
+  if (!current) return undefined;
+  const next = normalize({ ...current, ...patch });
+  await d.put('items', next);
+  return next;
+}
+
 export async function listItems(): Promise<ClosetItem[]> {
   const all = await (await db()).getAllFromIndex('items', 'by-created');
-  return all.reverse(); // newest first
+  return all.map(normalize).reverse(); // newest first
 }
 
 export async function deleteItem(id: string): Promise<void> {
