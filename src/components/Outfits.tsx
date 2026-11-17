@@ -4,15 +4,10 @@ import { explainEmpty, generateOutfits } from '../outfits';
 import { BlobImage } from './BlobImage';
 import { ClosetGrid } from './ClosetGrid';
 
-function currentSeason(d = new Date()): Season {
-  const m = d.getMonth(); // Northern hemisphere
-  return m >= 2 && m <= 4 ? 'spring' : m >= 5 && m <= 7 ? 'summer' : m >= 8 && m <= 10 ? 'fall' : 'winter';
-}
-
 const ORDER = ['outerwear', 'top', 'dress', 'bottom', 'shoes', 'accessory'];
 
 export function Outfits({ items }: { items: ClosetItem[] }) {
-  const [season, setSeason] = useState<Season | null>(currentSeason());
+  const [season, setSeason] = useState<Season | null>(null) // null = any season until the user picks one;
   const [formality, setFormality] = useState<Formality | null>(null);
   const [anchor, setAnchor] = useState<ClosetItem | null>(null);
   const [picking, setPicking] = useState(false);
