@@ -1,1 +1,1 @@
-{"root":["./src/App.tsx","./src/main.tsx","./vite.config.ts"],"version":"5.9.3"}
+{"root":["./src/App.tsx","./src/db.test.ts","./src/db.ts","./src/image.ts","./src/main.tsx","./src/components/AddItem.tsx","./src/components/ClosetGrid.tsx","./vite.config.ts"],"version":"5.9.3"}
