@@ -6,12 +6,13 @@ import { ItemEditor } from './components/ItemEditor';
 import { defaultSeasons } from './classify';
 import { describeItem } from './describe';
 import { Outfits } from './components/Outfits';
+import { Backup } from './components/Backup';
 
 export function App() {
   const [items, setItems] = useState<ClosetItem[]>([]);
   const [editing, setEditing] = useState<ClosetItem | null>(null);
   const [filter, setFilter] = useState<Category | 'all'>('all');
-  const [tab, setTab] = useState<'closet' | 'outfits'>('closet');
+  const [tab, setTab] = useState<'closet' | 'outfits' | 'backup'>('closet');
   const [progress, setProgress] = useState<string | null>(null);
   const refresh = useCallback(() => listItems().then(setItems), []);
   useEffect(() => void refresh(), [refresh]);
@@ -43,8 +44,9 @@ export function App() {
       <nav className="tabs">
         <button className={tab === 'closet' ? 'tab on' : 'tab'} onClick={() => setTab('closet')}>Closet</button>
         <button className={tab === 'outfits' ? 'tab on' : 'tab'} onClick={() => setTab('outfits')}>Outfits</button>
+        <button className={tab === 'backup' ? 'tab on' : 'tab'} onClick={() => setTab('backup')}>Backup</button>
       </nav>
-      {tab === 'outfits' ? <Outfits items={items} /> : <>
+      {tab === 'outfits' ? <Outfits items={items} /> : tab === 'backup' ? <Backup onRestored={refresh} /> : <>
       <AddItem onAdded={item => { refresh(); setEditing(item); }} />
       {unnamed.length > 0 && (
         <button className="chip" disabled={!!progress} onClick={autoNameAll}>

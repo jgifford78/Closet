@@ -26,16 +26,36 @@ export interface ClosetItem {
   photoRev: number;
 }
 
+/** A favorited outfit. id is the sorted item ids joined, so saving twice is a no-op. */
+export interface SavedOutfit { id: string; itemIds: string[]; createdAt: number }
+/** One "I wore this" entry. */
+export interface WornEntry { id: string; at: number; itemIds: string[] }
+
+export const outfitKey = (itemIds: string[]) => [...itemIds].sort().join('|');
+
+/** itemId -> timestamp it was last worn. */
+export function lastWornMap(worn: WornEntry[]): Record<string, number> {
+  const m: Record<string, number> = {};
+  for (const w of worn) for (const id of w.itemIds) if (!m[id] || w.at > m[id]) m[id] = w.at;
+  return m;
+}
+
 interface ClosetDB extends DBSchema {
   items: { key: string; value: ClosetItem; indexes: { 'by-created': number } };
+  outfits: { key: string; value: SavedOutfit };
+  worn: { key: string; value: WornEntry };
 }
 
 let dbPromise: Promise<IDBPDatabase<ClosetDB>> | undefined;
 
 function db() {
-  dbPromise ??= openDB<ClosetDB>('closet', 1, {
-    upgrade(d) {
-      d.createObjectStore('items', { keyPath: 'id' }).createIndex('by-created', 'createdAt');
+  dbPromise ??= openDB<ClosetDB>('closet', 2, {
+    upgrade(d, oldVersion) {
+      if (oldVersion < 1) d.createObjectStore('items', { keyPath: 'id' }).createIndex('by-created', 'createdAt');
+      if (oldVersion < 2) {
+        d.createObjectStore('outfits', { keyPath: 'id' });
+        d.createObjectStore('worn', { keyPath: 'id' });
+      }
     }
   });
   return dbPromise;
@@ -80,6 +100,60 @@ export async function listItems(): Promise<ClosetItem[]> {
   return all.map(normalize).reverse(); // newest first
 }
 
+/** Deleting an item also removes saved outfits that used it. */
 export async function deleteItem(id: string): Promise<void> {
-  await (await db()).delete('items', id);
+  const d = await db();
+  const tx = d.transaction(['items', 'outfits'], 'readwrite');
+  await tx.objectStore('items').delete(id);
+  for (const o of await tx.objectStore('outfits').getAll())
+    if (o.itemIds.includes(id)) await tx.objectStore('outfits').delete(o.id);
+  await tx.done;
+}
+
+export async function saveOutfit(itemIds: string[]): Promise<SavedOutfit> {
+  const o: SavedOutfit = { id: outfitKey(itemIds), itemIds, createdAt: Date.now() };
+  await (await db()).put('outfits', o);
+  return o;
+}
+export async function unsaveOutfit(id: string): Promise<void> {
+  await (await db()).delete('outfits', id);
+}
+export async function listSavedOutfits(): Promise<SavedOutfit[]> {
+  return (await (await db()).getAll('outfits')).sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export async function logWorn(itemIds: string[], at = Date.now()): Promise<WornEntry> {
+  const w: WornEntry = { id: crypto.randomUUID(), at, itemIds };
+  await (await db()).put('worn', w);
+  return w;
+}
+export async function listWorn(): Promise<WornEntry[]> {
+  return (await db()).getAll('worn');
+}
+
+// ---- Backup support (raw access) ----
+
+export interface Snapshot { items: ClosetItem[]; outfits: SavedOutfit[]; worn: WornEntry[] }
+
+export async function readAll(): Promise<Snapshot> {
+  const d = await db();
+  return { items: (await d.getAll('items')).map(normalize), outfits: await d.getAll('outfits'), worn: await d.getAll('worn') };
+}
+
+/** Merge a snapshot in: existing ids are kept untouched. Outfits are only added if all their items exist. */
+export async function mergeAll(snap: Snapshot): Promise<{ items: number; outfits: number; worn: number }> {
+  const d = await db();
+  const tx = d.transaction(['items', 'outfits', 'worn'], 'readwrite');
+  const added = { items: 0, outfits: 0, worn: 0 };
+  for (const it of snap.items)
+    if (!(await tx.objectStore('items').get(it.id))) { await tx.objectStore('items').put(normalize(it)); added.items++; }
+  for (const o of snap.outfits) {
+    if (await tx.objectStore('outfits').get(o.id)) continue;
+    const have = await Promise.all(o.itemIds.map(id => tx.objectStore('items').get(id)));
+    if (have.every(Boolean)) { await tx.objectStore('outfits').put(o); added.outfits++; }
+  }
+  for (const w of snap.worn)
+    if (!(await tx.objectStore('worn').get(w.id))) { await tx.objectStore('worn').put(w); added.worn++; }
+  await tx.done;
+  return added;
 }

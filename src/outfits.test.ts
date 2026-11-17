@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { colorScore, explainEmpty, formalityOk, generateOutfits, pairScore, type Piece } from './outfits';
+import { colorScore, explainEmpty, formalityOk, generateOutfits, pairScore, wornPenalty, type Piece } from './outfits';
 
 function rng(seed = 1) { // mulberry32, deterministic
   return () => {
@@ -95,5 +95,26 @@ describe('generateOutfits', () => {
     const a = generateOutfits(c, { rng: rng(7) }), b = generateOutfits(c, { rng: rng(7) });
     expect(a.length).toBe(1);
     expect(a.map(o => o.items.map(i => i.id))).toEqual(b.map(o => o.items.map(i => i.id)));
+  });
+});
+
+describe('worn log', () => {
+  const now = Date.UTC(2026, 10, 17);
+  const day = 86_400_000;
+  it('penalizes recent wear only, capped', () => {
+    const items = [p('a', 'top'), p('b', 'bottom'), p('c', 'shoes'), p('d', 'outerwear')];
+    expect(wornPenalty(items, { a: now - day }, now)).toBe(0.15);
+    expect(wornPenalty(items, { a: now - 5 * day }, now)).toBe(0.08);
+    expect(wornPenalty(items, { a: now - 20 * day }, now)).toBe(0);
+    expect(wornPenalty(items, { a: now, b: now, c: now, d: now }, now)).toBe(0.4);
+  });
+  it('prefers rested pieces when two outfits are otherwise equal', () => {
+    const c = [p('t1', 'top', ['white']), p('t2', 'top', ['white']), p('b', 'bottom', ['navy'])];
+    let t2First = 0;
+    for (let s = 1; s <= 30; s++) {
+      const [first] = generateOutfits(c, { rng: rng(s), count: 1, lastWorn: { t1: now - day }, now });
+      if (first.items.some(i => i.id === 't2')) t2First++;
+    }
+    expect(t2First).toBeGreaterThan(20);
   });
 });

@@ -38,3 +38,4 @@ button.danger { background: #fff; color: #b91c1c; border: 1px solid #fecaca; bor
 .outfit ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
 .outfit li { position: relative; aspect-ratio: 1; background: #fff; border-radius: 10px; overflow: hidden; }
 .outfit img { width: 100%; height: 100%; object-fit: contain; }
+.outfit-actions { display: flex; gap: 8px; margin-top: 10px; }

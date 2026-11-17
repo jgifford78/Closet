@@ -21,6 +21,8 @@ export interface Options {
   anchorId?: string | null;      // build the outfit around this item
   count?: number;                // outfits to return (default 3)
   attempts?: number;             // random tries (default 600)
+  lastWorn?: Record<string, number>; // itemId -> timestamp last worn; recent pieces are de-prioritized
+  now?: number;
   rng?: () => number;
 }
 
@@ -87,6 +89,18 @@ function formalityCohesion(items: Piece[]): number {
 const seasonOk = (i: Piece, season?: Season | null) => !season || !i.seasons.length || i.seasons.includes(season);
 const formalityMatches = (i: Piece, f?: Formality | null) => !f || !i.formality || i.formality === f;
 
+/** Score penalty for pieces worn recently: 0.15 within 3 days, 0.08 within a week, capped at 0.4 total. */
+export function wornPenalty(items: Piece[], lastWorn: Record<string, number> = {}, now = Date.now()): number {
+  let penalty = 0;
+  for (const i of items) {
+    const at = lastWorn[i.id];
+    if (at === undefined) continue;
+    const days = (now - at) / 86_400_000;
+    penalty += days < 3 ? 0.15 : days < 7 ? 0.08 : 0;
+  }
+  return Math.min(penalty, 0.4);
+}
+
 // ---- Generation ----------------------------------------------------------
 
 const pick = <T,>(list: T[], rng: () => number): T | undefined => list[Math.floor(rng() * list.length)];
@@ -103,7 +117,7 @@ function outerwearChance(season?: Season | null): number {
  * Random sampling keeps it fast for big closets and gives variety on every shuffle.
  */
 export function generateOutfits<T extends Piece>(closet: T[], opts: Options = {}): Outfit<T>[] {
-  const { season = null, formality = null, anchorId = null, count = 3, attempts = 600, rng = Math.random } = opts;
+  const { season = null, formality = null, anchorId = null, count = 3, attempts = 600, rng = Math.random, lastWorn, now = Date.now() } = opts;
 
   const usable = closet.filter(i => i.category && seasonOk(i, season) && formalityMatches(i, formality));
   const by = (c: Category) => usable.filter(i => i.category === c);
@@ -151,7 +165,7 @@ export function generateOutfits<T extends Piece>(closet: T[], opts: Options = {}
     }
     if (anchor && !items.includes(anchor)) continue;
 
-    const score = cs * 0.7 + formalityCohesion(items) * 0.3;
+    const score = Math.max(0.01, cs * 0.7 + formalityCohesion(items) * 0.3 - wornPenalty(items, lastWorn, now));
     const key = items.map(i => i.id).sort().join('|');
     if (!seen.has(key)) seen.set(key, { items, score });
   }
