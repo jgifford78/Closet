@@ -14,7 +14,7 @@ Open the deployed URL in Safari → Share → Add to Home Screen.
 1. Scaffold + PWA install ✔
 2. Camera/photo capture, background removal, closet grid ✔
 3. Tags + color extraction ✔
-4. Rules-based outfit generator
+4. Rules-based outfit generator ✔
 5. Save/favorite outfits, worn log, backup/restore
 6. Polish
 

@@ -5,11 +5,13 @@ import { ClosetGrid } from './components/ClosetGrid';
 import { ItemEditor } from './components/ItemEditor';
 import { defaultSeasons } from './classify';
 import { describeItem } from './describe';
+import { Outfits } from './components/Outfits';
 
 export function App() {
   const [items, setItems] = useState<ClosetItem[]>([]);
   const [editing, setEditing] = useState<ClosetItem | null>(null);
   const [filter, setFilter] = useState<Category | 'all'>('all');
+  const [tab, setTab] = useState<'closet' | 'outfits'>('closet');
   const [progress, setProgress] = useState<string | null>(null);
   const refresh = useCallback(() => listItems().then(setItems), []);
   useEffect(() => void refresh(), [refresh]);
@@ -38,6 +40,11 @@ export function App() {
   return (
     <main>
       <h1>Closet</h1>
+      <nav className="tabs">
+        <button className={tab === 'closet' ? 'tab on' : 'tab'} onClick={() => setTab('closet')}>Closet</button>
+        <button className={tab === 'outfits' ? 'tab on' : 'tab'} onClick={() => setTab('outfits')}>Outfits</button>
+      </nav>
+      {tab === 'outfits' ? <Outfits items={items} /> : <>
       <AddItem onAdded={item => { refresh(); setEditing(item); }} />
       {unnamed.length > 0 && (
         <button className="chip" disabled={!!progress} onClick={autoNameAll}>
@@ -50,6 +57,7 @@ export function App() {
         ))}
       </div>
       <ClosetGrid items={shown} onSelect={setEditing} />
+      </>}
       {editing && <ItemEditor key={editing.id} item={editing} onClose={() => { setEditing(null); refresh(); }} />}
     </main>
   );
