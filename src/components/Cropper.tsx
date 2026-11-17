@@ -3,7 +3,7 @@ import type { CropFraction } from '../image';
 
 /** Drag on the picture to box the item (handy for screenshots with page clutter). */
 export function Cropper({ file, onDone, onCancel }: {
-  file: File;
+  file: Blob;
   onDone: (crop?: CropFraction) => void;
   onCancel: () => void;
 }) {

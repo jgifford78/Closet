@@ -12,6 +12,14 @@ describe('closet store', () => {
     expect((await listItems()).map(i => i.id)).toEqual([b.id]);
   });
 
+  it('replacing the photo bumps photoRev', async () => {
+    const it = await addItem({ name: 'p', photo: new Blob(['1']), backgroundRemoved: true });
+    expect(it.photoRev).toBe(0);
+    const next = await updateItem(it.id, { photo: new Blob(['2']) });
+    expect(next?.photoRev).toBe(1);
+    expect((await updateItem(it.id, { name: 'q' }))?.photoRev).toBe(1);
+  });
+
   it('defaults tags and updates them', async () => {
     const it = await addItem({ name: 'x', photo: new Blob(['x']), backgroundRemoved: false });
     expect(it).toMatchObject({ category: null, colors: [], seasons: [], formality: null, autoNamed: false });

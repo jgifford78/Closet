@@ -22,6 +22,8 @@ export interface ClosetItem {
   formality: Formality | null;
   /** True while the name is generated (not typed by the user), so it can follow category/color edits. */
   autoNamed: boolean;
+  /** Bumped when the photo is replaced (crop) so cached object URLs refresh. */
+  photoRev: number;
 }
 
 interface ClosetDB extends DBSchema {
@@ -47,6 +49,7 @@ function normalize(raw: Partial<ClosetItem> & Pick<ClosetItem, 'id' | 'name' | '
     seasons: [],
     formality: null,
     autoNamed: raw.name === 'New item',
+    photoRev: 0,
     ...raw
   };
 }
@@ -62,12 +65,12 @@ export async function addItem(input: NewItem): Promise<ClosetItem> {
 
 export async function updateItem(
   id: string,
-  patch: Partial<Pick<ClosetItem, 'name' | 'category' | 'colors' | 'seasons' | 'formality' | 'autoNamed'>>
+  patch: Partial<Pick<ClosetItem, 'name' | 'category' | 'colors' | 'seasons' | 'formality' | 'autoNamed' | 'photo' | 'backgroundRemoved'>>
 ): Promise<ClosetItem | undefined> {
   const d = await db();
   const current = await d.get('items', id);
   if (!current) return undefined;
-  const next = normalize({ ...current, ...patch });
+  const next = normalize({ ...current, ...patch, photoRev: patch.photo ? current.photoRev + 1 : current.photoRev });
   await d.put('items', next);
   return next;
 }

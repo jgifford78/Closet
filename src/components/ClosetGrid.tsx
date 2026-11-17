@@ -9,7 +9,7 @@ export function ClosetGrid({ items, onSelect }: { items: ClosetItem[]; onSelect:
     <ul className="grid">
       {items.map(item => (
         <li key={item.id} onClick={() => onSelect(item)}>
-          <BlobImage id={item.id} blob={item.photo} alt={item.name} />
+          <BlobImage id={`${item.id}:${item.photoRev}`} blob={item.photo} alt={item.name} />
           {!item.category && <span className="untagged">Untagged</span>}
           <span className="label">{item.name}</span>
           <span className="dots">
