@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  CATEGORIES, FORMALITIES, SEASONS, deleteItem, updateItem,
+  CATEGORIES, FORMALITIES, SEASONS, deleteItem, lastWornMap, listWorn, updateItem,
   type Category, type ClosetItem, type Formality, type Season
 } from '../db';
 import { BlobImage } from './BlobImage';
 import { Cropper } from './Cropper';
 import { defaultName, defaultSeasons } from '../classify';
 import { describeItem } from '../describe';
+import { daysAgoLabel } from '../format';
 import { cleanCutout, downscale, extractColors, type CropFraction } from '../image';
 import { COLOR_HEX, COLOR_NAMES, type ColorName } from '../colors';
 
@@ -26,6 +27,8 @@ export function ItemEditor({ item, onClose }: { item: ClosetItem; onClose: () =>
   const [colorsTouched, setColorsTouched] = useState(false);
   const [cropping, setCropping] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [lastWorn, setLastWorn] = useState<number | null>(null);
+  useEffect(() => { void listWorn().then(w => setLastWorn(lastWornMap(w)[item.id] ?? null)); }, [item.id]);
 
   /** While the name is generated, keep it in sync with category/color edits. */
   function rename(nextCategory: Category | null, nextColors: ColorName[]) {
@@ -82,6 +85,7 @@ export function ItemEditor({ item, onClose }: { item: ClosetItem; onClose: () =>
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" onClick={e => e.stopPropagation()}>
         <BlobImage className="preview" id={`${item.id}:${item.photoRev}:${photoRev}`} blob={photo} alt={name} />
+        <p className="hint">{lastWorn ? `Last worn ${daysAgoLabel(lastWorn)}` : 'Not worn yet'}</p>
         <div className="chips">
           <button className="chip" disabled={!!busy} onClick={() => setCropping(true)}>Crop photo</button>
           <button className="chip" disabled={!!busy} onClick={autoName}>{busy ?? 'Auto-name'}</button>

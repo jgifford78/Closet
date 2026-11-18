@@ -59,7 +59,7 @@ export function AddItem({ onAdded }: { onAdded: (item: ClosetItem) => void }) {
   }
 
   return (
-    <div className="add">
+    <div className="add add-item">
       <label className="check">
         <input type="checkbox" checked={removeBg} onChange={e => setRemoveBg(e.target.checked)} />
         Remove background

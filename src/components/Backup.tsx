@@ -1,15 +1,15 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createBackup, restoreBackup } from '../backup';
-
-const KEY = 'closet:lastBackup';
-const read = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
-const write = (v: string) => { try { localStorage.setItem(KEY, v); } catch { /* storage unavailable */ } };
+import { getLastBackup, setLastBackup } from '../reminder';
+import { requestPersistence } from '../storage';
 
 export function Backup({ onRestored }: { onRestored: () => void }) {
   const input = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [last, setLast] = useState(read());
+  const [last, setLast] = useState<Date | null>(getLastBackup());
+  const [protectedStorage, setProtectedStorage] = useState<boolean | null>(null);
+  useEffect(() => { void requestPersistence().then(setProtectedStorage); }, []);
 
   async function exportAll() {
     setBusy(true);
@@ -32,8 +32,8 @@ export function Backup({ onRestored }: { onRestored: () => void }) {
         a.click();
         setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
       }
-      const now = new Date().toLocaleString();
-      write(now);
+      const now = new Date();
+      setLastBackup(now);
       setLast(now);
       setMsg('Backup created. Save it to Files or iCloud Drive.');
     } catch (e) {
@@ -61,7 +61,8 @@ export function Backup({ onRestored }: { onRestored: () => void }) {
   return (
     <section>
       <p className="hint">Your closet lives only on this phone. Export a backup now and then, and before switching phones.</p>
-      <p className="hint">{last ? `Last backup: ${last}` : 'No backup yet on this phone.'}</p>
+      <p className="hint">{last ? `Last backup: ${last.toLocaleString()}` : 'No backup yet on this phone.'}
+        {protectedStorage === false && ' iOS may clear app data if the phone runs low on space, so backups matter.'}</p>
       <div className="add">
         <button className="primary" disabled={busy} onClick={exportAll}>Export backup</button>
         <button className="chip" disabled={busy} onClick={() => input.current?.click()}>Import backup…</button>

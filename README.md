@@ -16,7 +16,7 @@ Open the deployed URL in Safari → Share → Add to Home Screen.
 3. Tags + color extraction ✔
 4. Rules-based outfit generator ✔
 5. Backup/restore, saved outfits, worn log ✔
-6. Polish
+6. Polish ✔ (storage protection, backup reminder, search/filters, dark mode, last worn)
 
 ## Dev
 ```
