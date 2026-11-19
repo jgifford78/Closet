@@ -8,7 +8,7 @@ import { Cropper } from './Cropper';
 import { defaultName, defaultSeasons } from '../classify';
 import { describeItem } from '../describe';
 import { daysAgoLabel } from '../format';
-import { cleanCutout, downscale, extractColors, type CropFraction } from '../image';
+import { cleanCutout, downscale, extractColors, opaqueShare, removeBackground, type CropFraction } from '../image';
 import { COLOR_HEX, COLOR_NAMES, type ColorName } from '../colors';
 
 function toggle<T>(list: T[], v: T): T[] {
@@ -27,6 +27,8 @@ export function ItemEditor({ item, onClose }: { item: ClosetItem; onClose: () =>
   const [colorsTouched, setColorsTouched] = useState(false);
   const [cropping, setCropping] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [bgRemoved, setBgRemoved] = useState(item.backgroundRemoved);
+  const [message, setMessage] = useState<string | null>(null);
   const [lastWorn, setLastWorn] = useState<number | null>(null);
   useEffect(() => { void listWorn().then(w => setLastWorn(lastWornMap(w)[item.id] ?? null)); }, [item.id]);
 
@@ -40,7 +42,7 @@ export function ItemEditor({ item, onClose }: { item: ClosetItem; onClose: () =>
   async function autoName() {
     setBusy('Detecting…');
     try {
-      const d = await describeItem(photo, item.backgroundRemoved, { category, colors });
+      const d = await describeItem(photo, bgRemoved, { category, colors });
       setName(d.name);
       setAutoNamed(true);
       if (!category && d.category) {
@@ -59,14 +61,36 @@ export function ItemEditor({ item, onClose }: { item: ClosetItem; onClose: () =>
     setBusy('Cropping…');
     try {
       // Stored photo is already processed; keep PNG when it has transparency.
-      let next = await downscale(photo, 1024, item.backgroundRemoved ? 'image/png' : 'image/jpeg', crop);
-      if (item.backgroundRemoved) next = await cleanCutout(next).catch(() => next);
+      let next = await downscale(photo, 1024, bgRemoved ? 'image/png' : 'image/jpeg', crop);
+      if (bgRemoved) next = await cleanCutout(next).catch(() => next);
       setPhoto(next);
       setPhotoRev(r => r + 1);
       if (!colorsTouched) {
-        const fresh = await extractColors(next, item.backgroundRemoved).catch(() => []);
+        const fresh = await extractColors(next, bgRemoved).catch(() => []);
         if (fresh.length) { setColors(fresh); rename(category, fresh); }
       }
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function removeBg() {
+    setBusy('Removing background… (first time downloads a model)');
+    setMessage(null);
+    try {
+      let cut = await removeBackground(photo);
+      cut = await cleanCutout(cut).catch(() => cut);
+      setPhoto(cut);
+      setPhotoRev(r => r + 1);
+      setBgRemoved(true);
+      if (!colorsTouched) {
+        const fresh = await extractColors(cut, true).catch(() => []);
+        if (fresh.length) { setColors(fresh); rename(category, fresh); }
+      }
+      if ((await opaqueShare(cut).catch(() => 0)) > 0.85)
+        setMessage('Most of the picture was kept. Try Crop photo around the item, then Remove background again.');
+    } catch (e) {
+      setMessage(`Background removal failed: ${(e as Error).message || 'unknown error'}`);
     } finally {
       setBusy(null);
     }
@@ -75,7 +99,7 @@ export function ItemEditor({ item, onClose }: { item: ClosetItem; onClose: () =>
   async function save() {
     await updateItem(item.id, {
       name: name.trim() || 'Untitled', category, colors, seasons, formality, autoNamed,
-      ...(photo !== item.photo ? { photo } : {})
+      ...(photo !== item.photo ? { photo, backgroundRemoved: bgRemoved } : {})
     });
     onClose();
   }
@@ -88,8 +112,11 @@ export function ItemEditor({ item, onClose }: { item: ClosetItem; onClose: () =>
         <p className="hint">{lastWorn ? `Last worn ${daysAgoLabel(lastWorn)}` : 'Not worn yet'}</p>
         <div className="chips">
           <button className="chip" disabled={!!busy} onClick={() => setCropping(true)}>Crop photo</button>
-          <button className="chip" disabled={!!busy} onClick={autoName}>{busy ?? 'Auto-name'}</button>
+          {!bgRemoved && <button className="chip" disabled={!!busy} onClick={removeBg}>Remove background</button>}
+          <button className="chip" disabled={!!busy} onClick={autoName}>Auto-name</button>
         </div>
+        {busy && <p className="hint">{busy}</p>}
+        {message && <p className="nudge">{message}</p>}
         <label className="field">
           Name
           <input value={name} onChange={e => { setName(e.target.value); setAutoNamed(false); }} />

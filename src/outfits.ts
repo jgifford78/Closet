@@ -156,27 +156,38 @@ export function generateOutfits<T extends Piece>(closet: T[], opts: Options = {}
     let cs = colorScore(main);
     if (worstPair(main) < 0.4 || cs < 0.5) continue; // any clashing pair rejects the outfit
 
-    // Optional accessory, only if it doesn't hurt the color story.
-    const a = pick(force('accessory', accessories), rng);
-    if (a && (anchor?.category === 'accessory' || rng() < 0.5)) {
-      const withA = [...items, a];
-      const csA = colorScore(withA.map(i => i.colors[0]));
-      if (formalityOk(withA) && worstPair(withA.map(i => i.colors[0])) >= 0.4 && (anchor?.category === 'accessory' || csA >= cs - 0.02)) { items.push(a); cs = csA; }
+    // Accessory: most outfits get one. Choose the best color match from the whole pool
+    // (with a little jitter so different accessories rotate); skip any that clash.
+    let hasAccessory = false;
+    if (accessories.length && (anchor?.category === 'accessory' || rng() < 0.7)) {
+      let best: T | undefined, bestScore = -1;
+      for (const a of force('accessory', accessories)) {
+        const withA = [...items, a];
+        if (!formalityOk(withA) || worstPair(withA.map(i => i.colors[0])) < 0.4) continue;
+        const sc = colorScore(withA.map(i => i.colors[0])) + rng() * 0.12;
+        if (sc > bestScore) { best = a; bestScore = sc; }
+      }
+      if (best) { items.push(best); hasAccessory = true; }
     }
     if (anchor && !items.includes(anchor)) continue;
 
-    const score = Math.max(0.01, cs * 0.7 + formalityCohesion(items) * 0.3 - wornPenalty(items, lastWorn, now));
-    const key = items.map(i => i.id).sort().join('|');
-    if (!seen.has(key)) seen.set(key, { items, score });
+    // cs is from the core pieces, so an accessory doesn't dilute the score; small bonus keeps parity.
+    const score = Math.max(0.01, cs * 0.7 + formalityCohesion(items) * 0.3 + (hasAccessory ? 0.02 : 0) - wornPenalty(items, lastWorn, now));
+    // One candidate per core combination, preferring the variant that has an accessory.
+    const key = items.filter(i => i.category !== 'accessory').map(i => i.id).sort().join('|');
+    const prev = seen.get(key);
+    if (!prev || (hasAccessory && !prev.items.some(i => i.category === 'accessory'))) seen.set(key, { items, score });
   }
 
   // Weighted pick from the best candidates so "Shuffle" varies without surfacing junk.
   const ranked = [...seen.values()].sort((a, b) => b.score - a.score).slice(0, Math.max(count * 6, 12));
   const out: Outfit<T>[] = [];
   while (out.length < count && ranked.length) {
-    const total = ranked.reduce((s, o) => s + o.score ** 4, 0);
+    // Higher score = more likely; recently worn pieces are strongly de-prioritized.
+    const weight = (o: Outfit<T>) => o.score ** 4 * Math.exp(-8 * wornPenalty(o.items, lastWorn, now));
+    const total = ranked.reduce((s, o) => s + weight(o), 0);
     let r = rng() * total, idx = 0;
-    for (; idx < ranked.length - 1; idx++) { r -= ranked[idx].score ** 4; if (r <= 0) break; }
+    for (; idx < ranked.length - 1; idx++) { r -= weight(ranked[idx]); if (r <= 0) break; }
     out.push(ranked.splice(idx, 1)[0]);
   }
   return out.sort((a, b) => b.score - a.score);

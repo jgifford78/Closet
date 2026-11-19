@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { addItem } from '../db';
-import { cleanCutout, downscale, extractColors, flattenOnWhite, removeBackground, type CropFraction } from '../image';
+import { cleanCutout, downscale, extractColors, flattenOnWhite, opaqueShare, removeBackground, type CropFraction } from '../image';
 import { Cropper } from './Cropper';
 import { classifyItem, defaultName, defaultSeasons } from '../classify';
 import type { Category, ClosetItem } from '../db';
@@ -11,9 +11,11 @@ export function AddItem({ onAdded }: { onAdded: (item: ClosetItem) => void }) {
   const [autoType, setAutoType] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
   const [pending, setPending] = useState<File | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function handleFile(file: File, crop?: CropFraction) {
     try {
+      setNotice(null);
       setStatus('Preparing photo…');
       const small = await downscale(file, 1024, 'image/jpeg', crop);
       let photo: Blob = small;
@@ -24,9 +26,11 @@ export function AddItem({ onAdded }: { onAdded: (item: ClosetItem) => void }) {
           photo = await removeBackground(small);
           backgroundRemoved = true;
           photo = await cleanCutout(photo).catch(() => photo);
+          if ((await opaqueShare(photo).catch(() => 0)) > 0.85)
+            setNotice('Most of the picture was kept, so the background may not have come off. Open the item, tap Crop photo around it, then Remove background.');
         } catch (e) {
           console.warn('Background removal failed, keeping original', e);
-          setStatus('Background removal failed; saving original…');
+          setNotice(`Background removal didn't run (${(e as Error).message || 'unknown error'}). The original photo was saved. Open the item and tap Remove background to retry.`);
         }
       }
       setStatus('Detecting colors…');
@@ -83,6 +87,7 @@ export function AddItem({ onAdded }: { onAdded: (item: ClosetItem) => void }) {
           onDone={crop => { const f = pending; setPending(null); void handleFile(f, crop); }}
         />
       )}
+      {notice && <p className="nudge" onClick={() => setNotice(null)}>{notice}</p>}
       <button className="primary" disabled={!!status} onClick={() => input.current?.click()}>
         {status ?? '+ Add item'}
       </button>

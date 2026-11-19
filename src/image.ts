@@ -91,3 +91,21 @@ export async function cleanCutout(photo: Blob): Promise<Blob> {
     out.toBlob(b => (b ? resolve(b) : reject(new Error('Image encode failed'))), 'image/png')
   );
 }
+
+/** Share (0..1) of a cutout that is opaque. Near 1 means little or no background was removed. */
+export async function opaqueShare(photo: Blob): Promise<number> {
+  const bitmap = await createImageBitmap(photo);
+  const size = 64;
+  const scale = size / Math.max(bitmap.width, bitmap.height);
+  const w = Math.max(1, Math.round(bitmap.width * scale)), h = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close();
+  const d = ctx.getImageData(0, 0, w, h).data;
+  let opaque = 0;
+  for (let i = 3; i < d.length; i += 4) if (d[i] > 128) opaque++;
+  return opaque / (w * h);
+}

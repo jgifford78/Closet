@@ -118,3 +118,31 @@ describe('worn log', () => {
     expect(t2First).toBeGreaterThan(20);
   });
 });
+
+describe('accessories', () => {
+  const base = [p('t1', 'top', ['white']), p('t2', 'top', ['blue']), p('b1', 'bottom', ['navy']), p('b2', 'bottom', ['black']), p('s1', 'shoes', ['black'])];
+  const share = (closet: Piece[], opts = {}) => {
+    let withAcc = 0, total = 0;
+    for (let s = 1; s <= 100; s++) for (const o of generateOutfits(closet, { rng: rng(s), ...opts })) { total++; if (o.items.some(i => i.category === 'accessory')) withAcc++; }
+    return withAcc / total;
+  };
+  it('includes a compatible accessory in most outfits', () => {
+    expect(share([...base, p('a1', 'accessory', ['brown'])])).toBeGreaterThan(0.55);
+    expect(share([...base, p('a1', 'accessory', ['gray'])])).toBeGreaterThan(0.55);
+  });
+  it('picks the best match from several accessories and rotates them', () => {
+    const closet = [...base, p('a1', 'accessory', ['gray']), p('a2', 'accessory', ['white']), p('a3', 'accessory', ['navy'])];
+    const used = new Set<string>();
+    for (let s = 1; s <= 60; s++) for (const o of generateOutfits(closet, { rng: rng(s) })) o.items.filter(i => i.category === 'accessory').forEach(i => used.add(i.id));
+    expect(used.size).toBeGreaterThan(1);
+  });
+  it('never adds an accessory that clashes', () => {
+    const closet = [p('t', 'top', ['green']), p('b', 'bottom', ['black']), p('s', 'shoes', ['black']), p('a', 'accessory', ['red'])];
+    expect(share(closet)).toBe(0);
+  });
+  it('anchor accessory is always present when it fits', () => {
+    const out = generateOutfits([...base, p('a1', 'accessory', ['gray'])], { anchorId: 'a1', rng: rng(4) });
+    expect(out.length).toBeGreaterThan(0);
+    expect(out.every(o => o.items.some(i => i.id === 'a1'))).toBe(true);
+  });
+});

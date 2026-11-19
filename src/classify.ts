@@ -13,7 +13,13 @@ export const PROMPTS: Array<[prompt: string, category: Category, typeName: strin
   ['a photo of a blazer', 'outerwear', 'Blazer'],
   ['a photo of shoes or sneakers', 'shoes', 'Shoes'],
   ['a photo of boots', 'shoes', 'Boots'],
-  ['a photo of a hat, belt, scarf, bag or sunglasses', 'accessory', 'Accessory']
+  ['a photo of a hat or cap', 'accessory', 'Hat'],
+  ['a photo of a belt', 'accessory', 'Belt'],
+  ['a photo of a handbag or backpack', 'accessory', 'Bag'],
+  ['a photo of a scarf', 'accessory', 'Scarf'],
+  ['a photo of sunglasses', 'accessory', 'Sunglasses'],
+  ['a photo of a watch or jewelry', 'accessory', 'Watch'],
+  ['a photo of a necktie', 'accessory', 'Tie']
 ];
 
 export interface Scored { label: string; score: number }
