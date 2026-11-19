@@ -34,9 +34,9 @@ export function App() {
     for (const [n, item] of unnamed.entries()) {
       setProgress(`Auto-naming ${n + 1}/${unnamed.length}…`);
       try {
-        const d = await describeItem(item.photo, item.backgroundRemoved, { category: item.category, colors: item.colors });
+        const d = await describeItem(item.photo, item.backgroundRemoved, { category: item.category, accessoryType: item.accessoryType, colors: item.colors });
         await updateItem(item.id, {
-          name: d.name, category: d.category, colors: d.colors, autoNamed: true,
+          name: d.name, category: d.category, accessoryType: d.accessoryType, colors: d.colors, autoNamed: true,
           seasons: item.seasons.length ? item.seasons : defaultSeasons(d.category)
         });
       } catch (e) {

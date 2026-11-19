@@ -111,6 +111,7 @@ export function Outfits({ items }: { items: ClosetItem[] }) {
           </div>
 
           {untagged > 0 && <p className="hint">{untagged} item{untagged > 1 ? 's are' : ' is'} untagged and skipped.</p>}
+          {items.some(i => i.category === 'accessory' && !i.accessoryType) && <p className="hint">Some accessories have no type yet. Open them and pick hat, belt, watch… so the right matching rules apply.</p>}
           {!items.some(i => i.category === 'accessory') && items.length > 0 && <p className="hint">No accessories yet. Set an item’s category to accessory (hat, belt, bag, scarf…) to include it in outfits.</p>}
           {!outfits.length && <p className="empty">{explainEmpty(items, opts)}</p>}
 

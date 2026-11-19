@@ -3,6 +3,8 @@ import type { ColorName } from './colors';
 
 export const CATEGORIES = ['top', 'bottom', 'dress', 'outerwear', 'shoes', 'accessory'] as const;
 export type Category = (typeof CATEGORIES)[number];
+export const ACCESSORY_TYPES = ['hat', 'belt', 'bag', 'scarf', 'sunglasses', 'watch', 'jewelry', 'tie'] as const;
+export type AccessoryType = (typeof ACCESSORY_TYPES)[number];
 export const SEASONS = ['spring', 'summer', 'fall', 'winter'] as const;
 export type Season = (typeof SEASONS)[number];
 export const FORMALITIES = ['casual', 'smart', 'formal'] as const;
@@ -16,6 +18,8 @@ export interface ClosetItem {
   photo: Blob;
   backgroundRemoved: boolean;
   category: Category | null;
+  /** Only meaningful when category is 'accessory'. */
+  accessoryType: AccessoryType | null;
   /** Most prominent first. */
   colors: ColorName[];
   seasons: Season[];
@@ -65,6 +69,7 @@ function db() {
 function normalize(raw: Partial<ClosetItem> & Pick<ClosetItem, 'id' | 'name' | 'createdAt' | 'photo' | 'backgroundRemoved'>): ClosetItem {
   return {
     category: null,
+    accessoryType: null,
     colors: [],
     seasons: [],
     formality: null,
@@ -75,7 +80,7 @@ function normalize(raw: Partial<ClosetItem> & Pick<ClosetItem, 'id' | 'name' | '
 }
 
 export type NewItem = Pick<ClosetItem, 'name' | 'photo' | 'backgroundRemoved'> &
-  Partial<Pick<ClosetItem, 'category' | 'colors' | 'seasons' | 'formality' | 'autoNamed'>>;
+  Partial<Pick<ClosetItem, 'category' | 'accessoryType' | 'colors' | 'seasons' | 'formality' | 'autoNamed'>>;
 
 export async function addItem(input: NewItem): Promise<ClosetItem> {
   const item = normalize({ id: crypto.randomUUID(), createdAt: Date.now(), ...input });
@@ -85,7 +90,7 @@ export async function addItem(input: NewItem): Promise<ClosetItem> {
 
 export async function updateItem(
   id: string,
-  patch: Partial<Pick<ClosetItem, 'name' | 'category' | 'colors' | 'seasons' | 'formality' | 'autoNamed' | 'photo' | 'backgroundRemoved'>>
+  patch: Partial<Pick<ClosetItem, 'name' | 'category' | 'accessoryType' | 'colors' | 'seasons' | 'formality' | 'autoNamed' | 'photo' | 'backgroundRemoved'>>
 ): Promise<ClosetItem | undefined> {
   const d = await db();
   const current = await d.get('items', id);

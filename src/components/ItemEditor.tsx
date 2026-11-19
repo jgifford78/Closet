@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import {
-  CATEGORIES, FORMALITIES, SEASONS, deleteItem, lastWornMap, listWorn, updateItem,
-  type Category, type ClosetItem, type Formality, type Season
+  ACCESSORY_TYPES, CATEGORIES, FORMALITIES, SEASONS, deleteItem, lastWornMap, listWorn, updateItem,
+  type AccessoryType, type Category, type ClosetItem, type Formality, type Season
 } from '../db';
 import { BlobImage } from './BlobImage';
 import { Cropper } from './Cropper';
-import { defaultName, defaultSeasons } from '../classify';
+import { ACCESSORY_LABEL, defaultName, defaultSeasons } from '../classify';
 import { describeItem } from '../describe';
 import { daysAgoLabel } from '../format';
 import { cleanCutout, downscale, extractColors, opaqueShare, removeBackground, type CropFraction } from '../image';
@@ -19,6 +19,7 @@ export function ItemEditor({ item, onClose }: { item: ClosetItem; onClose: () =>
   const [name, setName] = useState(item.name);
   const [autoNamed, setAutoNamed] = useState(item.autoNamed);
   const [category, setCategory] = useState<Category | null>(item.category);
+  const [accessoryType, setAccessoryType] = useState<AccessoryType | null>(item.accessoryType);
   const [colors, setColors] = useState<ColorName[]>(item.colors);
   const [seasons, setSeasons] = useState<Season[]>(item.seasons);
   const [formality, setFormality] = useState<Formality | null>(item.formality);
@@ -32,19 +33,21 @@ export function ItemEditor({ item, onClose }: { item: ClosetItem; onClose: () =>
   const [lastWorn, setLastWorn] = useState<number | null>(null);
   useEffect(() => { void listWorn().then(w => setLastWorn(lastWornMap(w)[item.id] ?? null)); }, [item.id]);
 
-  /** While the name is generated, keep it in sync with category/color edits. */
-  function rename(nextCategory: Category | null, nextColors: ColorName[]) {
-    if (autoNamed) setName(defaultName(nextCategory, nextColors));
+  /** While the name is generated, keep it in sync with category/type/color edits. */
+  function rename(nextCategory: Category | null, nextColors: ColorName[], nextType: AccessoryType | null = accessoryType) {
+    if (autoNamed) setName(defaultName(nextCategory, nextColors, nextCategory === 'accessory' && nextType ? ACCESSORY_LABEL[nextType] : null));
   }
-  function pickCategory(c: Category | null) { setCategory(c); rename(c, colors); }
+  function pickCategory(c: Category | null) { setCategory(c); if (c !== 'accessory') setAccessoryType(null); rename(c, colors, c === 'accessory' ? accessoryType : null); }
+  function pickAccessoryType(t: AccessoryType | null) { setAccessoryType(t); rename(category, colors, t); }
   function pickColors(c: ColorName[]) { setColors(c); setColorsTouched(true); rename(category, c); }
 
   async function autoName() {
     setBusy('Detecting…');
     try {
-      const d = await describeItem(photo, bgRemoved, { category, colors });
+      const d = await describeItem(photo, bgRemoved, { category, accessoryType, colors });
       setName(d.name);
       setAutoNamed(true);
+      if (d.accessoryType) setAccessoryType(d.accessoryType);
       if (!category && d.category) {
         setCategory(d.category);
         if (!seasons.length) setSeasons(defaultSeasons(d.category));
@@ -98,7 +101,7 @@ export function ItemEditor({ item, onClose }: { item: ClosetItem; onClose: () =>
 
   async function save() {
     await updateItem(item.id, {
-      name: name.trim() || 'Untitled', category, colors, seasons, formality, autoNamed,
+      name: name.trim() || 'Untitled', category, accessoryType: category === 'accessory' ? accessoryType : null, colors, seasons, formality, autoNamed,
       ...(photo !== item.photo ? { photo, backgroundRemoved: bgRemoved } : {})
     });
     onClose();
@@ -128,6 +131,17 @@ export function ItemEditor({ item, onClose }: { item: ClosetItem; onClose: () =>
             <button key={c} className={category === c ? 'chip on' : 'chip'} onClick={() => pickCategory(category === c ? null : c)}>{c}</button>
           ))}
         </div>
+
+        {category === 'accessory' && (
+          <>
+            <div className="field">Accessory type <small>(sets how it's matched)</small></div>
+            <div className="chips">
+              {ACCESSORY_TYPES.map(t => (
+                <button key={t} className={accessoryType === t ? 'chip on' : 'chip'} onClick={() => pickAccessoryType(accessoryType === t ? null : t)}>{ACCESSORY_LABEL[t].toLowerCase()}</button>
+              ))}
+            </div>
+          </>
+        )}
 
         <div className="field">Colors <small>(first = main)</small></div>
         <div className="chips">

@@ -2,8 +2,8 @@ import { useRef, useState } from 'react';
 import { addItem } from '../db';
 import { cleanCutout, downscale, extractColors, flattenOnWhite, opaqueShare, removeBackground, type CropFraction } from '../image';
 import { Cropper } from './Cropper';
-import { classifyItem, defaultName, defaultSeasons } from '../classify';
-import type { Category, ClosetItem } from '../db';
+import { ACCESSORY_LABEL, classifyItem, defaultName, defaultSeasons } from '../classify';
+import type { AccessoryType, Category, ClosetItem } from '../db';
 
 export function AddItem({ onAdded }: { onAdded: (item: ClosetItem) => void }) {
   const input = useRef<HTMLInputElement>(null);
@@ -37,11 +37,12 @@ export function AddItem({ onAdded }: { onAdded: (item: ClosetItem) => void }) {
       const colors = await extractColors(photo, backgroundRemoved).catch(() => []);
       let category: Category | null = null;
       let type: string | null = null;
+      let accessoryType: AccessoryType | null = null;
       if (autoType) {
         setStatus('Identifying item… (first time downloads a model)');
         const url = URL.createObjectURL(await flattenOnWhite(photo));
         try {
-          ({ category, type } = await classifyItem(url));
+          ({ category, type, accessoryType } = await classifyItem(url));
         } catch (e) {
           console.warn('Category detection failed; leaving blank', e);
         } finally {
@@ -49,7 +50,8 @@ export function AddItem({ onAdded }: { onAdded: (item: ClosetItem) => void }) {
         }
       }
       const item = await addItem({
-        name: defaultName(category, colors, type),
+        name: defaultName(category, colors, accessoryType ? ACCESSORY_LABEL[accessoryType] : type),
+        accessoryType,
         autoNamed: true,
         photo, backgroundRemoved, colors, category, seasons: defaultSeasons(category)
       });

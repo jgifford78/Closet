@@ -1,10 +1,11 @@
-import type { Category, Formality, Season } from './db';
+import type { AccessoryType, Category, Formality, Season } from './db';
 import type { ColorName } from './colors';
 
 /** The fields the rules need; the UI passes full ClosetItems. */
 export interface Piece {
   id: string;
   category: Category | null;
+  accessoryType?: AccessoryType | null;
   colors: ColorName[];
   seasons: Season[];
   formality: Formality | null;
@@ -112,8 +113,76 @@ function outerwearChance(season?: Season | null): number {
   return 0.5;
 }
 
+// ---- Accessories ---------------------------------------------------------
+
+interface AccessoryRule { chance: number; colorMatters: boolean; max: number }
+/** Per type: chance an outfit includes it, whether color matters, and how many can be worn at once. */
+export const ACCESSORY_RULES: Record<AccessoryType, AccessoryRule> = {
+  hat: { chance: 0.25, colorMatters: true, max: 1 },
+  belt: { chance: 0.6, colorMatters: true, max: 1 },
+  bag: { chance: 0.5, colorMatters: true, max: 1 },
+  scarf: { chance: 0.35, colorMatters: true, max: 1 },
+  tie: { chance: 0.5, colorMatters: true, max: 1 },
+  sunglasses: { chance: 0.35, colorMatters: false, max: 1 },
+  watch: { chance: 0.6, colorMatters: false, max: 1 },
+  jewelry: { chance: 0.65, colorMatters: false, max: 3 } // rings, chains, bracelets can stack
+};
+const UNTYPED_RULE: AccessoryRule = { chance: 0.5, colorMatters: true, max: 1 };
+const MAX_ACCESSORIES = 4;
+const isDressy = (i: Piece) => i.formality === 'smart' || i.formality === 'formal';
+
 /**
- * Build outfits from a closet. Shape: (top + bottom | dress) [+ shoes] [+ outerwear] [+ accessory].
+ * Pick the accessories for an outfit. Each type is rolled separately, so several can be worn at once.
+ * Color-sensitive types (belt, hat, bag, scarf, tie) must not clash; belts must also match the shoes.
+ * Color-free types (sunglasses, watch, jewelry) only need to fit the formality.
+ */
+function chooseAccessories<T extends Piece>(core: T[], pool: T[], ctx: { season: Season | null; anchor?: T; rng: () => number }): T[] {
+  const { season, anchor, rng } = ctx;
+  const groups = new Map<AccessoryType | 'other', T[]>();
+  for (const a of pool) groups.set(a.accessoryType ?? 'other', [...(groups.get(a.accessoryType ?? 'other') ?? []), a]);
+  const types = [...groups.keys()].sort(() => rng() - 0.5);
+
+  const chosen: T[] = [];
+  const hasBottom = core.some(i => i.category === 'bottom');
+  const hasTop = core.some(i => i.category === 'top');
+  const shoes = core.find(i => i.category === 'shoes');
+
+  for (const type of types) {
+    const rule = type === 'other' ? UNTYPED_RULE : ACCESSORY_RULES[type];
+    const list = groups.get(type)!;
+    const forced = !!anchor && anchor.category === 'accessory' && list.includes(anchor);
+    if (chosen.length >= MAX_ACCESSORIES && !forced) continue;
+    if (!forced && rng() >= rule.chance) continue;
+    if (type === 'belt' && !hasBottom) continue;           // belts go with pants/skirts/shorts
+    if (type === 'tie' && !hasTop) continue;               // ties go with a top, not a dress
+    if (type === 'scarf' && season === 'summer') continue;
+
+    const withSoFar = [...core, ...chosen];
+    const candidates: Array<{ a: T; score: number }> = [];
+    for (const a of forced ? [anchor!] : list) {
+      const withA = [...withSoFar, a];
+      if (!formalityOk(withA)) continue;
+      if (type === 'tie' && (a.formality === 'casual' || withSoFar.some(i => i.formality === 'casual'))) continue; // no tie with a casual outfit
+      if (type === 'tie' && a.formality !== 'formal' && a.formality !== 'smart' && !withSoFar.some(isDressy)) continue; // untagged tie needs a dressy outfit
+      let score = 0.5;
+      if (rule.colorMatters) {
+        const colors = withA.map(i => i.colors[0]);
+        if (worstPair(colors) < 0.4) continue;
+        if (type === 'belt' && shoes && pairScore(a.colors[0], shoes.colors[0]) < 0.85) continue; // brown belt, black shoes: no
+        score = colorScore(colors);
+      }
+      candidates.push({ a, score: score + rng() * 0.12 });
+    }
+    candidates.sort((x, y) => y.score - x.score);
+    const target = type === 'jewelry' ? Math.min(rule.max, 1 + (rng() < 0.5 ? 1 : 0) + (rng() < 0.25 ? 1 : 0)) : rule.max;
+    const room = forced ? target : Math.min(target, MAX_ACCESSORIES - chosen.length);
+    for (const { a } of candidates.slice(0, room)) chosen.push(a);
+  }
+  return chosen;
+}
+
+/**
+ * Build outfits from a closet. Shape: (top + bottom | dress) [+ shoes] [+ outerwear] [+ accessories...].
  * Random sampling keeps it fast for big closets and gives variety on every shuffle.
  */
 export function generateOutfits<T extends Piece>(closet: T[], opts: Options = {}): Outfit<T>[] {
@@ -156,19 +225,10 @@ export function generateOutfits<T extends Piece>(closet: T[], opts: Options = {}
     let cs = colorScore(main);
     if (worstPair(main) < 0.4 || cs < 0.5) continue; // any clashing pair rejects the outfit
 
-    // Accessory: most outfits get one. Choose the best color match from the whole pool
-    // (with a little jitter so different accessories rotate); skip any that clash.
-    let hasAccessory = false;
-    if (accessories.length && (anchor?.category === 'accessory' || rng() < 0.7)) {
-      let best: T | undefined, bestScore = -1;
-      for (const a of force('accessory', accessories)) {
-        const withA = [...items, a];
-        if (!formalityOk(withA) || worstPair(withA.map(i => i.colors[0])) < 0.4) continue;
-        const sc = colorScore(withA.map(i => i.colors[0])) + rng() * 0.12;
-        if (sc > bestScore) { best = a; bestScore = sc; }
-      }
-      if (best) { items.push(best); hasAccessory = true; }
-    }
+    // Accessories: each type is rolled on its own, so an outfit can carry several.
+    const acc = accessories.length ? chooseAccessories(items, accessories, { season, anchor, rng }) : [];
+    items.push(...acc);
+    const hasAccessory = acc.length > 0;
     if (anchor && !items.includes(anchor)) continue;
 
     // cs is from the core pieces, so an accessory doesn't dilute the score; small bonus keeps parity.

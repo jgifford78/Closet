@@ -1,4 +1,4 @@
-import type { Category, Season } from './db';
+import type { AccessoryType, Category, Season } from './db';
 
 /** CLIP prompts -> category. Several prompts per category; their scores are summed. */
 export const PROMPTS: Array<[prompt: string, category: Category, typeName: string]> = [
@@ -18,7 +18,8 @@ export const PROMPTS: Array<[prompt: string, category: Category, typeName: strin
   ['a photo of a handbag or backpack', 'accessory', 'Bag'],
   ['a photo of a scarf', 'accessory', 'Scarf'],
   ['a photo of sunglasses', 'accessory', 'Sunglasses'],
-  ['a photo of a watch or jewelry', 'accessory', 'Watch'],
+  ['a photo of a wristwatch', 'accessory', 'Watch'],
+  ['a photo of a ring, necklace, chain or bracelet', 'accessory', 'Jewelry'],
   ['a photo of a necktie', 'accessory', 'Tie']
 ];
 
@@ -42,6 +43,17 @@ export function pickCategory(results: Scored[], minScore = 0.35): { category: Ca
   return { category: best, type: bestType.get(best)?.t ?? null, score: bestScore };
 }
 
+/** Type names the classifier emits for accessories -> accessory type. */
+const ACCESSORY_BY_NAME: Record<string, AccessoryType> = {
+  Hat: 'hat', Belt: 'belt', Bag: 'bag', Scarf: 'scarf', Sunglasses: 'sunglasses', Watch: 'watch', Jewelry: 'jewelry', Tie: 'tie'
+};
+export const ACCESSORY_LABEL: Record<AccessoryType, string> = {
+  hat: 'Hat', belt: 'Belt', bag: 'Bag', scarf: 'Scarf', sunglasses: 'Sunglasses', watch: 'Watch', jewelry: 'Jewelry', tie: 'Tie'
+};
+export const accessoryTypeFromName = (name?: string | null): AccessoryType | null => (name && ACCESSORY_BY_NAME[name]) || null;
+/** Colors say little about these, so default names leave them out ("Watch", not "Gray Watch"). */
+const COLORLESS_NAMES = new Set(['Watch', 'Jewelry', 'Sunglasses']);
+
 const GENERIC_TYPE: Record<Category, string> = {
   top: 'Top', bottom: 'Pants', dress: 'Dress', outerwear: 'Jacket', shoes: 'Shoes', accessory: 'Accessory'
 };
@@ -50,7 +62,7 @@ const GENERIC_TYPE: Record<Category, string> = {
 export function defaultName(category: Category | null, colors: string[], type?: string | null): string {
   const base = type ?? (category ? GENERIC_TYPE[category] : null);
   if (!base) return 'New item';
-  const color = colors[0] ? colors[0][0].toUpperCase() + colors[0].slice(1) : '';
+  const color = colors[0] && !COLORLESS_NAMES.has(base) ? colors[0][0].toUpperCase() + colors[0].slice(1) : '';
   return color ? `${color} ${base}` : base;
 }
 
@@ -73,9 +85,9 @@ function load(): Promise<Classifier> {
 }
 
 /** On-device guess of the clothing category. Model downloads on first use, then is cached. */
-export async function classifyItem(imageUrl: string): Promise<{ category: Category | null; type: string | null }> {
+export async function classifyItem(imageUrl: string): Promise<{ category: Category | null; type: string | null; accessoryType: AccessoryType | null }> {
   const run = await load();
   const results = await run(imageUrl, PROMPTS.map(([p]) => p));
   const { category, type } = pickCategory(results);
-  return { category, type };
+  return { category, type, accessoryType: category === 'accessory' ? accessoryTypeFromName(type) : null };
 }
